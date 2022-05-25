@@ -163,7 +163,7 @@ func (m *MTR) Run() (err error) {
 		}
 	}()
 
-	m.discover(1)
+	m.discover(3)
 
 	return nil
 }
