@@ -17,6 +17,7 @@ import (
 )
 
 type MTR struct {
+	Count          int
 	SrcAddress     string `json:"source"`
 	mutex          *sync.RWMutex
 	timeout        time.Duration
@@ -28,6 +29,7 @@ type MTR struct {
 	maxHops        int
 	maxUnknownHops int
 	ptrLookup      bool
+	destCount      int
 }
 
 func NewMTR(addr, srcAddr string, timeout time.Duration, interval time.Duration,
@@ -56,6 +58,7 @@ func NewMTR(addr, srcAddr string, timeout time.Duration, interval time.Duration,
 		}
 	}
 	return &MTR{
+		Count:          3,
 		SrcAddress:     srcAddr,
 		interval:       interval,
 		timeout:        timeout,
@@ -84,6 +87,10 @@ func (m *MTR) registerStatistic(ttl int, r icmp.ICMPReturn) *hop.HopStatistic {
 			RingBufferSize: m.ringBufferSize,
 		}
 		m.Statistic[ttl] = s
+	}
+
+	if r.Addr == m.Address {
+		m.destCount += 1
 	}
 
 	s.Last = r
@@ -153,63 +160,75 @@ func (m *MTR) Render(offset int) {
 	}
 }
 
-func (m *MTR) Run() (err error) {
-	defer func() {
-		if e := recover(); e != nil {
-			log.Printf("discover failed: %v", e)
-			buf := make([]byte, 64<<10)
-			buf = buf[:runtime.Stack(buf, false)]
-			err = fmt.Errorf("errgroup: panic recovered: %s\n %s", e, buf)
-		}
-	}()
-
-	m.discover(3)
-
-	return nil
-}
-
-// discover discovers all hops on the route
-func (m *MTR) discover(count int) {
+//discover 探测一跳的数据
+func (m *MTR) discover(ttl int) (err error) {
 	rand.Seed(time.Now().UnixNano())
 	seq := rand.Intn(math.MaxUint16)
 	id := rand.Intn(math.MaxUint16) & 0xffff
 
 	ipAddr := net.IPAddr{IP: net.ParseIP(m.Address)}
 
-	for i := 1; i <= count; i++ {
-		time.Sleep(m.interval)
+	var hopReturn icmp.ICMPReturn
 
-		unknownHopsCount := 0
+	if ipAddr.IP.To4() != nil {
+		hopReturn, err = icmp.SendDiscoverICMP(m.SrcAddress, &ipAddr, ttl, id, m.timeout, seq)
+	} else {
+		hopReturn, err = icmp.SendDiscoverICMPv6(m.SrcAddress, &ipAddr, ttl, id, m.timeout, seq)
+	}
+
+	//判断跳数是否超出
+	if m.destCount >= m.Count {
+		return
+	}
+
+	m.mutex.Lock()
+	s := m.registerStatistic(ttl, hopReturn)
+	s.Dest = &ipAddr
+	s.PID = id
+	m.mutex.Unlock()
+
+	return nil
+}
+
+// Run discovers all hops on the route
+func (m *MTR) Run() (err error) {
+	defer func() {
+		if e := recover(); e != nil {
+			log.Printf("Run failed: %v", e)
+			buf := make([]byte, 64<<10)
+			buf = buf[:runtime.Stack(buf, false)]
+			err = fmt.Errorf("errgroup: panic recovered: %s\n %s", e, buf)
+		}
+	}()
+
+	var wg sync.WaitGroup
+
+	for i := 1; i <= m.Count; i++ {
 		for ttl := 1; ttl < m.maxHops; ttl++ {
-			seq++
-			time.Sleep(m.hopsleep)
 
-			var hopReturn icmp.ICMPReturn
-			var err error
+			wg.Add(1)
 
-			if ipAddr.IP.To4() != nil {
-				hopReturn, err = icmp.SendDiscoverICMP(m.SrcAddress, &ipAddr, ttl, id, m.timeout, seq)
-			} else {
-				hopReturn, err = icmp.SendDiscoverICMPv6(m.SrcAddress, &ipAddr, ttl, id, m.timeout, seq)
-			}
+			go func(ttl int) {
 
-			m.mutex.Lock()
-			s := m.registerStatistic(ttl, hopReturn)
-			s.Dest = &ipAddr
-			s.PID = id
-			m.mutex.Unlock()
+				defer func() {
+					if e := recover(); e != nil {
+						log.Printf("discover err: %v", e)
+						buf := make([]byte, 64<<10) //64*2^10, 64KB
+						buf = buf[:runtime.Stack(buf, false)]
+						err = fmt.Errorf("panic recovered: %s\n %s", e, buf)
+					}
+					wg.Done()
+				}()
 
-			if hopReturn.Addr == m.Address {
-				break
-			}
-			if err != nil || !hopReturn.Success {
-				unknownHopsCount++
-				if unknownHopsCount >= m.maxUnknownHops {
-					break
+				e := m.discover(ttl)
+				if err == nil && e != nil {
+					err = e
 				}
-				continue
-			}
-			unknownHopsCount = 0
+			}(ttl)
 		}
 	}
+
+	wg.Wait()
+
+	return nil
 }
