@@ -30,6 +30,7 @@ type MTR struct {
 	maxUnknownHops int
 	ptrLookup      bool
 	destCount      int
+	destHop        int
 }
 
 func NewMTR(addr, srcAddr string, timeout time.Duration, interval time.Duration,
@@ -91,6 +92,9 @@ func (m *MTR) registerStatistic(ttl int, r icmp.ICMPReturn) *hop.HopStatistic {
 
 	if r.Addr == m.Address {
 		m.destCount += 1
+		if ttl > m.destHop {
+			m.destHop = ttl
+		}
 	}
 
 	s.Last = r
@@ -177,7 +181,7 @@ func (m *MTR) discover(ttl int) (err error) {
 	}
 
 	//判断跳数是否超出
-	if m.destCount >= m.Count {
+	if m.destCount >= m.Count && ttl > m.destHop {
 		return
 	}
 
