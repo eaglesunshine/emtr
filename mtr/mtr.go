@@ -30,7 +30,7 @@ type MTR struct {
 	maxUnknownHops int
 	ptrLookup      bool
 	destCount      int
-	destHop        int
+	DestHop        int
 }
 
 func NewMTR(addr, srcAddr string, timeout time.Duration, interval time.Duration,
@@ -92,8 +92,8 @@ func (m *MTR) registerStatistic(ttl int, r icmp.ICMPReturn) *hop.HopStatistic {
 
 	if r.Addr == m.Address {
 		m.destCount += 1
-		if ttl > m.destHop {
-			m.destHop = ttl
+		if ttl > m.DestHop {
+			m.DestHop = ttl
 		}
 	}
 
@@ -180,11 +180,6 @@ func (m *MTR) discover(ttl int) (err error) {
 		hopReturn, _ = icmp.SendDiscoverICMPv6(m.SrcAddress, &ipAddr, ttl, id, m.timeout, seq)
 	}
 
-	////判断跳数是否超出
-	//if m.destCount >= m.Count && ttl > m.destHop {
-	//	return
-	//}
-
 	m.mutex.Lock()
 	s := m.registerStatistic(ttl, hopReturn)
 	s.Dest = &ipAddr
@@ -235,9 +230,9 @@ func (m *MTR) Run() (err error) {
 	wg.Wait()
 
 	//数据处理：删除DestHop后面的数据
-	if m.destHop > 0 {
-		var ret map[int]*hop.HopStatistic
-		for i := 1; i <= m.destHop; i++ {
+	if m.DestHop > 0 {
+		ret := make(map[int]*hop.HopStatistic)
+		for i := 1; i <= m.DestHop; i++ {
 			ret[i] = m.Statistic[i]
 		}
 		m.Statistic = ret
