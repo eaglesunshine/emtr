@@ -175,15 +175,15 @@ func (m *MTR) discover(ttl int) (err error) {
 	var hopReturn icmp.ICMPReturn
 
 	if ipAddr.IP.To4() != nil {
-		hopReturn, err = icmp.SendDiscoverICMP(m.SrcAddress, &ipAddr, ttl, id, m.timeout, seq)
+		hopReturn, _ = icmp.SendDiscoverICMP(m.SrcAddress, &ipAddr, ttl, id, m.timeout, seq)
 	} else {
-		hopReturn, err = icmp.SendDiscoverICMPv6(m.SrcAddress, &ipAddr, ttl, id, m.timeout, seq)
+		hopReturn, _ = icmp.SendDiscoverICMPv6(m.SrcAddress, &ipAddr, ttl, id, m.timeout, seq)
 	}
 
-	//判断跳数是否超出
-	if m.destCount >= m.Count && ttl > m.destHop {
-		return
-	}
+	////判断跳数是否超出
+	//if m.destCount >= m.Count && ttl > m.destHop {
+	//	return
+	//}
 
 	m.mutex.Lock()
 	s := m.registerStatistic(ttl, hopReturn)
@@ -233,6 +233,15 @@ func (m *MTR) Run() (err error) {
 	}
 
 	wg.Wait()
+
+	//数据处理：删除DestHop后面的数据
+	if m.destHop > 0 {
+		var ret map[int]*hop.HopStatistic
+		for i := 1; i <= m.destHop; i++ {
+			ret[i] = m.Statistic[i]
+		}
+		m.Statistic = ret
+	}
 
 	return nil
 }
