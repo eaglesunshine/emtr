@@ -11,7 +11,6 @@ import (
 	"sync"
 	"time"
 
-	gm "github.com/buger/goterm"
 	"github.com/eaglesunshine/emtr/hop"
 	"github.com/eaglesunshine/emtr/icmp"
 )
@@ -29,8 +28,6 @@ type MTR struct {
 	maxHops        int
 	maxUnknownHops int
 	ptrLookup      bool
-	destCount      int
-	DestHop        int
 }
 
 func NewMTR(addr, srcAddr string, timeout time.Duration, interval time.Duration,
@@ -90,13 +87,6 @@ func (m *MTR) registerStatistic(ttl int, r icmp.ICMPReturn) *hop.HopStatistic {
 		m.Statistic[ttl] = s
 	}
 
-	if r.Addr == m.Address {
-		m.destCount += 1
-		if ttl > m.DestHop {
-			m.DestHop = ttl
-		}
-	}
-
 	s.Last = r
 	s.Sent++
 
@@ -151,92 +141,88 @@ func addTarget(currentTargets []string, toAdd string) []string {
 	return append(newTargets, toAdd)
 }
 
-// TODO: aggregates everything using the first target even when there are multiple
-func (m *MTR) Render(offset int) {
-	gm.MoveCursor(1, offset)
-	l := fmt.Sprintf("%d", m.ringBufferSize)
-	gm.Printf("HOP:    %-20s  %5s%%  %4s  %6s  %6s  %6s  %6s  %"+l+"s\n", "Address", "Loss", "Sent", "Last", "Avg", "Best", "Worst", "Packets")
-	for i := 1; i <= len(m.Statistic); i++ {
-		gm.MoveCursor(1, offset+i)
-		m.mutex.RLock()
-		m.Statistic[i].Render(m.ptrLookup)
-		m.mutex.RUnlock()
-	}
-}
-
-//discover 探测一跳的数据
-func (m *MTR) discover(ttl int) (err error) {
-	rand.Seed(time.Now().UnixNano())
-	seq := rand.Intn(math.MaxUint16)
-	id := rand.Intn(math.MaxUint16) & 0xffff
-
-	ipAddr := net.IPAddr{IP: net.ParseIP(m.Address)}
-
-	var hopReturn icmp.ICMPReturn
-
-	if ipAddr.IP.To4() != nil {
-		hopReturn, _ = icmp.SendDiscoverICMP(m.SrcAddress, &ipAddr, ttl, id, m.timeout, seq)
-	} else {
-		hopReturn, _ = icmp.SendDiscoverICMPv6(m.SrcAddress, &ipAddr, ttl, id, m.timeout, seq)
-	}
-
-	m.mutex.Lock()
-	s := m.registerStatistic(ttl, hopReturn)
-	s.Dest = &ipAddr
-	s.PID = id
-	m.mutex.Unlock()
-
-	return nil
-}
-
-// Run discovers all hops on the route
+// Run ...
 func (m *MTR) Run() (err error) {
 	defer func() {
 		if e := recover(); e != nil {
-			log.Printf("Run failed: %v", e)
+			log.Printf("discover failed: %v", e)
 			buf := make([]byte, 64<<10)
 			buf = buf[:runtime.Stack(buf, false)]
 			err = fmt.Errorf("errgroup: panic recovered: %s\n %s", e, buf)
 		}
 	}()
 
+	var handlers []func() error
+	for i := 0; i < m.Count; i++ {
+		handlers = append(handlers, func() error {
+			return m.discover()
+		})
+	}
+
+	return GoroutineNotPanic(handlers...)
+}
+
+// discover discovers all hops on the route
+func (m *MTR) discover() (err error) {
+	rand.Seed(time.Now().UnixNano())
+	seq := rand.Intn(math.MaxUint16)
+	id := rand.Intn(math.MaxUint16) & 0xffff
+
+	ipAddr := net.IPAddr{IP: net.ParseIP(m.Address)}
+
+	for ttl := 1; ttl < m.maxHops; ttl++ {
+		seq++
+		time.Sleep(m.hopsleep)
+
+		var hopReturn icmp.ICMPReturn
+
+		if ipAddr.IP.To4() != nil {
+			hopReturn, _ = icmp.SendDiscoverICMP(m.SrcAddress, &ipAddr, ttl, id, m.timeout, seq)
+		} else {
+			hopReturn, _ = icmp.SendDiscoverICMPv6(m.SrcAddress, &ipAddr, ttl, id, m.timeout, seq)
+		}
+
+		m.mutex.Lock()
+		s := m.registerStatistic(ttl, hopReturn)
+		s.Dest = &ipAddr
+		s.PID = id
+		m.mutex.Unlock()
+
+		if hopReturn.Addr == m.Address {
+			break
+		}
+	}
+
+	return nil
+}
+
+// GoroutineNotPanic ...
+func GoroutineNotPanic(handlers ...func() error) (err error) {
 	var wg sync.WaitGroup
 
-	for i := 1; i <= m.Count; i++ {
-		for ttl := 1; ttl < m.maxHops; ttl++ {
+	for _, f := range handlers {
+		wg.Add(1)
 
-			wg.Add(1)
+		go func(handler func() error) {
 
-			go func(ttl int) {
-
-				defer func() {
-					if e := recover(); e != nil {
-						log.Printf("discover err: %v", e)
-						buf := make([]byte, 64<<10) //64*2^10, 64KB
-						buf = buf[:runtime.Stack(buf, false)]
-						err = fmt.Errorf("panic recovered: %s\n %s", e, buf)
-					}
-					wg.Done()
-				}()
-
-				e := m.discover(ttl)
-				if err == nil && e != nil {
-					err = e
+			defer func() {
+				if e := recover(); e != nil {
+					log.Printf(err.Error())
+					buf := make([]byte, 64<<10) //64*2^10, 64KB
+					buf = buf[:runtime.Stack(buf, false)]
+					err = fmt.Errorf("panic recovered: %s\n %s", e, buf)
 				}
-			}(ttl)
-		}
+				wg.Done()
+			}()
+
+			e := handler()
+			if err == nil && e != nil {
+				err = e
+			}
+		}(f)
 	}
 
 	wg.Wait()
 
-	//数据处理：删除DestHop后面的数据
-	if m.DestHop > 0 {
-		ret := make(map[int]*hop.HopStatistic)
-		for i := 1; i <= m.DestHop; i++ {
-			ret[i] = m.Statistic[i]
-		}
-		m.Statistic = ret
-	}
-
-	return nil
+	return
 }

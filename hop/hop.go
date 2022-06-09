@@ -8,7 +8,6 @@ import (
 	"net"
 	"time"
 
-	gm "github.com/buger/goterm"
 	"github.com/eaglesunshine/emtr/icmp"
 )
 
@@ -124,36 +123,6 @@ func (h *HopStatistic) packets() []*packet {
 		i++
 	})
 	return v
-}
-
-func (h *HopStatistic) Render(ptrLookup bool) {
-	if h.dnsCache == nil {
-		h.dnsCache = map[string]string{}
-	}
-	packets := make([]byte, h.RingBufferSize)
-	i := h.RingBufferSize - 1
-	h.Packets.Do(func(f interface{}) {
-		if f == nil {
-			packets[i] = ' '
-		} else if !f.(icmp.ICMPReturn).Success {
-			packets[i] = '?'
-		} else {
-			packets[i] = '.'
-		}
-		i--
-	})
-	l := fmt.Sprintf("%d", h.RingBufferSize)
-	gm.Printf("%3d:|-- %-20s  %5.1f%%  %4d  %6.1f  %6.1f  %6.1f  %6.1f  %"+l+"s\n",
-		h.TTL,
-		fmt.Sprintf("%.20s", h.lookupAddr(ptrLookup, 0)),
-		h.Loss(),
-		h.Sent,
-		h.Last.Elapsed.Seconds()*1000,
-		h.Avg(),
-		h.Best.Elapsed.Seconds()*1000,
-		h.Worst.Elapsed.Seconds()*1000,
-		packets,
-	)
 }
 
 func (h *HopStatistic) lookupAddr(ptrLookup bool, index int) string {
