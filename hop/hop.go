@@ -1,3 +1,4 @@
+// Package hop TODO
 package hop
 
 import (
@@ -11,6 +12,7 @@ import (
 	"github.com/eaglesunshine/emtr/icmp"
 )
 
+// HopStatistic TODO
 type HopStatistic struct {
 	Dest           *net.IPAddr
 	Timeout        time.Duration
@@ -33,6 +35,7 @@ type packet struct {
 	ResponseTime float64 `json:"respond_ms"`
 }
 
+// MarshalJSON TODO
 func (h *HopStatistic) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&struct {
 		Sent             int       `json:"sent"`
@@ -61,6 +64,7 @@ func (h *HopStatistic) MarshalJSON() ([]byte, error) {
 	})
 }
 
+// Avg TODO
 func (h *HopStatistic) Avg() float64 {
 	avg := 0.0
 	if !(h.Sent-h.Lost == 0) {
@@ -69,6 +73,7 @@ func (h *HopStatistic) Avg() float64 {
 	return avg
 }
 
+// Stdev TODO
 func (h *HopStatistic) Stdev() float64 {
 	avg := h.Avg()
 	result := 0.0
@@ -95,6 +100,7 @@ func (h *HopStatistic) Stdev() float64 {
 	return result
 }
 
+// Loss TODO
 func (h *HopStatistic) Loss() float64 {
 	return float64(h.Lost) / float64(h.Sent) * 100.0
 }

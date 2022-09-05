@@ -1,3 +1,4 @@
+// Package icmp TODO
 package icmp
 
 import (
@@ -13,7 +14,9 @@ import (
 )
 
 const (
-	ProtocolICMP     = 1  // Internet Control Message
+	// ProtocolICMP TODO
+	ProtocolICMP = 1 // Internet Control Message
+	// ProtocolIPv6ICMP TODO
 	ProtocolIPv6ICMP = 58 // ICMP for IPv6
 )
 
@@ -25,17 +28,20 @@ type ICMPReturn struct {
 }
 
 // SendDiscoverICMP sends a ICMP to a given destination with a TTL to discover hops
-func SendDiscoverICMP(localAddr string, dst net.Addr, ttl, id int, timeout time.Duration, seq int) (hop ICMPReturn, err error) {
+func SendDiscoverICMP(localAddr string, dst net.Addr, ttl, id int, timeout time.Duration, seq int) (hop ICMPReturn,
+	err error) {
 	return SendICMP(localAddr, dst, "", ttl, id, timeout, seq)
 }
 
 // SendDiscoverICMPv6 sends a ICMP to a given destination with a TTL to discover hops
-func SendDiscoverICMPv6(localAddr string, dst net.Addr, ttl, id int, timeout time.Duration, seq int) (hop ICMPReturn, err error) {
+func SendDiscoverICMPv6(localAddr string, dst net.Addr, ttl, id int, timeout time.Duration, seq int) (hop ICMPReturn,
+	err error) {
 	return SendICMPv6(localAddr, dst, "", ttl, id, timeout, seq)
 }
 
 // SendICMP sends a ICMP to a given destination which requires a  reply from that specific destination
-func SendICMP(localAddr string, dst net.Addr, target string, ttl, id int, timeout time.Duration, seq int) (hop ICMPReturn, err error) {
+func SendICMP(localAddr string, dst net.Addr, target string, ttl, id int, timeout time.Duration,
+	seq int) (hop ICMPReturn, err error) {
 	hop.Success = false
 	start := time.Now()
 	c, err := icmp.ListenPacket("ip4:icmp", localAddr)
@@ -84,7 +90,8 @@ func SendICMP(localAddr string, dst net.Addr, target string, ttl, id int, timeou
 }
 
 // SendICMPv6 sends a ICMP to a given destination which requires a  reply from that specific destination
-func SendICMPv6(localAddr string, dst net.Addr, target string, ttl, id int, timeout time.Duration, seq int) (hop ICMPReturn, err error) {
+func SendICMPv6(localAddr string, dst net.Addr, target string, ttl, id int, timeout time.Duration,
+	seq int) (hop ICMPReturn, err error) {
 	hop.Success = false
 	start := time.Now()
 	c, err := icmp.ListenPacket("ip6:ipv6-icmp", localAddr)
@@ -132,7 +139,8 @@ func SendICMPv6(localAddr string, dst net.Addr, target string, ttl, id int, time
 	return hop, err
 }
 
-func listenForSpecific6(conn *icmp.PacketConn, deadline time.Time, neededPeer string, neededBody []byte, id, needSeq int, sent []byte) (string, []byte, error) {
+func listenForSpecific6(conn *icmp.PacketConn, deadline time.Time, neededPeer string, neededBody []byte, id,
+	needSeq int, sent []byte) (string, []byte, error) {
 	for {
 		b := make([]byte, 1500)
 		n, peer, err := conn.ReadFrom(b)
@@ -184,7 +192,8 @@ func listenForSpecific6(conn *icmp.PacketConn, deadline time.Time, neededPeer st
 }
 
 // listenForSpecific4 listens for a reply from a specific destination with a specifi body and returns the body if returned
-func listenForSpecific4(conn *icmp.PacketConn, deadline time.Time, neededPeer string, neededBody []byte, pid, needSeq int, sent []byte) (string, []byte, error) {
+func listenForSpecific4(conn *icmp.PacketConn, deadline time.Time, neededPeer string, neededBody []byte, pid,
+	needSeq int, sent []byte) (string, []byte, error) {
 	for {
 		b := make([]byte, 1500)
 		n, peer, err := conn.ReadFrom(b)

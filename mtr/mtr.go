@@ -1,3 +1,4 @@
+// Package mtr TODO
 package mtr
 
 import (
@@ -15,6 +16,7 @@ import (
 	"github.com/eaglesunshine/emtr/icmp"
 )
 
+// MTR TODO
 type MTR struct {
 	Count          int
 	SrcAddress     string `json:"source"`
@@ -30,12 +32,13 @@ type MTR struct {
 	ptrLookup      bool
 }
 
+// NewMTR TODO
 func NewMTR(addr, srcAddr string, timeout time.Duration, interval time.Duration,
 	hopsleep time.Duration, maxHops, maxUnknownHops, ringBufferSize int, ptr bool) (c *MTR, err error) {
 	defer func() {
 		if e := recover(); e != nil {
 			log.Print(e)
-			buf := make([]byte, 64<<10) //64*2^10, 64KB
+			buf := make([]byte, 64<<10) // 64*2^10, 64KB
 			buf = buf[:runtime.Stack(buf, false)]
 			err = fmt.Errorf("panic recovered: %s\n %s", e, buf)
 		}
@@ -141,7 +144,7 @@ func addTarget(currentTargets []string, toAdd string) []string {
 	return append(newTargets, toAdd)
 }
 
-// Run ...
+// Run TODO
 func (m *MTR) Run() (err error) {
 	defer func() {
 		if e := recover(); e != nil {
@@ -162,7 +165,7 @@ func (m *MTR) Run() (err error) {
 	return GoroutineNotPanic(handlers...)
 }
 
-// discover discovers all hops on the route
+// discover all hops on the route
 func (m *MTR) discover() (err error) {
 	rand.Seed(time.Now().UnixNano())
 	seq := rand.Intn(math.MaxUint16)
@@ -196,7 +199,7 @@ func (m *MTR) discover() (err error) {
 	return nil
 }
 
-// GoroutineNotPanic ...
+// GoroutineNotPanic TODO
 func GoroutineNotPanic(handlers ...func() error) (err error) {
 	var wg sync.WaitGroup
 
@@ -208,7 +211,7 @@ func GoroutineNotPanic(handlers ...func() error) (err error) {
 			defer func() {
 				if e := recover(); e != nil {
 					log.Printf(err.Error())
-					buf := make([]byte, 64<<10) //64*2^10, 64KB
+					buf := make([]byte, 64<<10) // 64*2^10, 64KB
 					buf = buf[:runtime.Stack(buf, false)]
 					err = fmt.Errorf("panic recovered: %s\n %s", e, buf)
 				}
